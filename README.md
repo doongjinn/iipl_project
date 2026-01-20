@@ -15,7 +15,7 @@ Some visualizations are shown in the figure below.
 ### Installation
 1. The default python version is python 3.8.
 2. Follow the installation of [DINO v2](https://github.com/facebookresearch/dinov2), please download DINO v2 ViT-B/14 distilled (without registers) pre-trained model.
-3. 
+3. Please download the pretrained model weight (https://drive.google.com/drive/folders/1HlGakaTWR77MKnCwzqBNsFjgk6Qhinym?usp=sharing)
 4. Use the following commands:
 ```
 conda create -n sofs python=3.8 -y
