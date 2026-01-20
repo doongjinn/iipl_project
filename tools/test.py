@@ -80,7 +80,8 @@ def test(cfg):
                                   "f1_score_max": []} for i in rand_seed_list}
         elif cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND",
                                   "DS_Spectrum_DS", "DS_Spectrum_DS_ND",
-                                  "opendomain_test_dataset_ND", "ECCV_Contest_Test_ND"]:
+                                  "opendomain_test_dataset_ND", "ECCV_Contest_Test_ND",
+                                  "CUSTOM_MASK_ND"]:
             pass
         else:
             raise NotImplementedError
@@ -151,9 +152,10 @@ def test(cfg):
 
                 if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND",
                                         "DS_Spectrum_DS", "DS_Spectrum_DS_ND",
-                                        "opendomain_test_dataset_ND", "ECCV_Contest_Test_ND"]:
+                                        "opendomain_test_dataset_ND", "ECCV_Contest_Test_ND",
+                                        "CUSTOM_MASK_ND"]:
                     if cfg.TEST.method in ["SegGPT", "SOFS"]:
-                        if cfg.DATASET.name in ["VISION_V1_ND", "DS_Spectrum_DS_ND"]:
+                        if cfg.DATASET.name in ["VISION_V1_ND", "DS_Spectrum_DS_ND", "CUSTOM_MASK_ND"]:
                             epoch_validate_non_resize_ss(
                                 val_loader=test_loader,
                                 model=model,

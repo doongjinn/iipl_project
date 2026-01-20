@@ -194,7 +194,7 @@ def train(cfg):
                 else:
                     validate_each_class = False
 
-                if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND", "ECCV_Contest_ND"]:
+                if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND", "CUSTOM_MASK_ND", "ECCV_Contest_ND"]:
                     if cfg.TRAIN.method in ["SOFS"]:
                         epoch_train_ss(
                             train_loader=train_loader,
@@ -208,6 +208,16 @@ def train(cfg):
                         raise NotImplementedError
                 else:
                     raise NotImplementedError
+
+                # Save a rolling checkpoint each epoch so evaluation failures don't lose the trained weights.
+                if cfg.TRAIN.save_model and is_master_proc():
+                    base_path = os.path.join(cfg.OUTPUT_DIR, "checkpoints")
+                    os.makedirs(base_path, exist_ok=True)
+                    last_name = os.path.join(base_path, "last.pth")
+                    model_ref = model.module if hasattr(model, "module") else model
+                    state_dict = model_ref.state_dict()
+                    cpu_state_dict = {k: v.detach().cpu() for k, v in state_dict.items()}
+                    torch.save(cpu_state_dict, last_name)
 
                 # if is_master_proc():
                 if cfg.TRAIN_SETUPS.TEST_SETUPS.test_state:
@@ -226,21 +236,31 @@ def train(cfg):
                                 FPR（False Positive Rate）= FP / (FP + TN)
                     """
                     if epoch % cfg.TRAIN_SETUPS.TEST_SETUPS.epoch_test == 0:
+                        # Also save a snapshot at evaluation epochs for convenience.
+                        if cfg.TRAIN.save_model and is_master_proc():
+                            base_path = os.path.join(cfg.OUTPUT_DIR, "checkpoints")
+                            os.makedirs(base_path, exist_ok=True)
+                            snap_name = os.path.join(base_path, f"epoch_{epoch}.pth")
+                            model_ref = model.module if hasattr(model, "module") else model
+                            state_dict = model_ref.state_dict()
+                            cpu_state_dict = {k: v.detach().cpu() for k, v in state_dict.items()}
+                            torch.save(cpu_state_dict, snap_name)
+
                         for test_idx in range(len(cfg.DATASET.sub_datasets)):
                             if cfg.TRAIN_SETUPS.TEST_SETUPS.val_state:
-                                tmp_val_sampler = val_sampler_list[test_idx]
                                 tmp_val_loader = val_loader_list[test_idx]
+                                if cfg.NUM_GPUS > 1:
+                                    tmp_val_sampler = val_sampler_list[test_idx]
+                                    tmp_val_sampler.set_epoch(cfg.RNG_SEED)
 
-                                tmp_val_sampler.set_epoch(cfg.RNG_SEED)
-
-                            tmp_test_sampler = test_sampler_list[test_idx]
                             tmp_test_loader = test_loader_list[test_idx]
+                            if cfg.NUM_GPUS > 1:
+                                tmp_test_sampler = test_sampler_list[test_idx]
+                                tmp_test_sampler.set_epoch(cfg.RNG_SEED)
 
-                            tmp_test_sampler.set_epoch(cfg.RNG_SEED)
-
-                            if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND"]:
+                            if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND", "CUSTOM_MASK_ND"]:
                                 if cfg.TRAIN.method in ["SOFS"]:
-                                    if cfg.DATASET.name in ["VISION_V1_ND"]:
+                                    if cfg.DATASET.name in ["VISION_V1_ND", "CUSTOM_MASK_ND"]:
                                         if cfg.TRAIN_SETUPS.TEST_SETUPS.val_state:
                                             epoch_validate_non_resize_ss(
                                                 val_loader=tmp_val_loader,
@@ -285,14 +305,13 @@ def train(cfg):
                         save_name = "new_" + save_name
                     save_name = os.path.join(base_path, save_name)
 
-                    if cfg.NUM_GPUS > 1:
-                        model_module = model.module.cpu()
-                        if cfg.TRAIN.method == "SOFS_ada":
-                            torch.save(model_module.backbone.state_dict(), save_name)
-                        else:
-                            torch.save(model_module.state_dict(), save_name)
+                    model_ref = model.module if hasattr(model, "module") else model
+                    if cfg.TRAIN.method == "SOFS_ada":
+                        state_dict = model_ref.backbone.state_dict()
                     else:
-                        torch.save(model.cpu().state_dict(), save_name)
+                        state_dict = model_ref.state_dict()
+                    cpu_state_dict = {k: v.detach().cpu() for k, v in state_dict.items()}
+                    torch.save(cpu_state_dict, save_name)
                     LOGGER.info("Model save in {}".format(save_name))
 
         LOGGER.info("Method training phase complete!")

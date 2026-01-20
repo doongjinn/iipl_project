@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+*.egg-info/
+.pytest_cache/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Logs / outputs
+*.log
+log_*/
+log_CUSTOM_*/
+figure_save/
+
+# Data artifacts
+*.pth
+*.pt
+*.ckpt
+
+# Large datasets (keep local)
+Open_Domain_Data/
+
+

@@ -11,6 +11,7 @@ _DATASETS = {
     "mvtec": ["datasets.few_shot_ad", "Few_Shot_AD_Dataset"],
     "visa": ["datasets.few_shot_ad", "Few_Shot_AD_Dataset"],
     "opendomain_test_dataset_ND": ["datasets.opendomain_test_ND", "OpenDomain_Test_ND"],
+    "CUSTOM_MASK_ND": ["datasets.custom_mask_fsss_ND", "CUSTOM_MASK_FSSS_ND"],
     "ECCV_Contest_ND": ["datasets.contest_fsss_ND", "CONTEST_FSSS_ND"],
     "ECCV_Contest_Test_ND": ["datasets.contest_test_ND", "CONTEST_Test_ND"]
 }

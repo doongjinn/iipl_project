@@ -1,25 +1,33 @@
 antialiased_cnns==0.3
-apex==0.9.10dev
-cuml==0.6.1.post1
+# Optional (not required for SOFS train/test):
+# - apex: only needed for some mixed-precision training setups
+# - cuml: only used by dinov2 eval (logistic regression); MUST be installed via rapidsai conda channel, not pip
+# apex==0.9.10dev
+# cuml==0.6.1.post1
 einops==0.8.0
 fvcore==0.1.5.post20221221
 matplotlib==3.7.1
-mmcv==2.0.0
-mmcv_full==1.6.1
-mmdet==3.3.0
+# NOTE:
+# SOFS codebase imports `mmcv.runner` and `mmcv.cnn.utils.weight_init`,
+# which are from OpenMMLab MMCV 1.x. MMCV 2.x moves runner/init utils to MMEngine,
+# causing `ModuleNotFoundError: mmcv.cnn.utils.weight_init`.
+# Use MMCV 1.6.1 to match mmsegmentation==0.27.0 and this repo's imports.
+mmcv-full==1.6.1
 mmsegmentation==0.27.0
 numpy==1.24.2
 omegaconf==2.3.0
 opencv_python==4.5.5.64
 opencv_python_headless==4.8.1.78
 Pillow==9.5.0
-Pillow==5.1.0
-Pillow==10.3.0
 scipy==1.9.1
 seaborn==0.13.2
 submitit==1.5.1
+tqdm==4.67.1
 timm==0.3.2
-torch==1.12.1+cu113
+# PyPI does not provide CUDA-tagged builds like `1.12.1+cu113`.
+# Install PyTorch via conda (recommended) or PyTorch's extra index URL, then keep it out of pip requirements.
+# Example (conda): conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch -c nvidia
+torch==1.12.1
 torchmetrics==1.2.0
-torchvision==0.13.1+cu113
-xformers.egg==info
+torchvision==0.13.1
+# xformers is optional and must match your torch+CUDA build; install separately if needed.

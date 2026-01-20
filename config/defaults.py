@@ -48,6 +48,26 @@ _C.DATASET.open_domain_test_object = ["severstal_steel"]
 _C.DATASET.open_domain_object_category_num = [1]
 _C.DATASET.open_domain_specific_defect_category = [0]  # 0 is the first
 
+# -----------------------------------------------------------------------------
+# Custom binary-mask FSSS dataset (single-object / single-category)
+# -----------------------------------------------------------------------------
+# If you use a custom dataset made of (images folder, masks folder),
+# set DATASET.name to "CUSTOM_MASK_ND" and configure paths via TRAIN/TEST.mask_path.
+_C.DATASET.custom_object_name = "custom_object"
+# Fraction of samples used for training; remaining samples are used for test/val.
+_C.DATASET.custom_train_ratio = 0.8
+# If set (>0), override ratio-based split and use exact counts.
+# Deterministic split order is based on sorted image filenames (paired with existing masks).
+_C.DATASET.custom_train_count = 0
+_C.DATASET.custom_test_count = 0
+# If True, when building an eval dataset (mode != "train") for CUSTOM_MASK_ND,
+# use the training split pairs instead of the held-out split. Useful for reporting
+# metrics on both train and test splits in evaluation mode.
+_C.DATASET.custom_eval_use_train_pairs = False
+# If True (CUSTOM_MASK_ND only), during eval (mode != "train") keep query samples from
+# the held-out split, but sample the support images from the training split.
+_C.DATASET.custom_support_from_train = False
+
 _C.TRAIN = CfgNode()
 _C.TRAIN.enable = True
 _C.TRAIN.save_model = False
@@ -56,6 +76,7 @@ _C.TRAIN.backbone = 'dinov2_vitb14'
 _C.TRAIN.backbone_load_state_dict = True
 _C.TRAIN.backbone_checkpoint = './dinov2_vitb14_pretrain.pth'
 _C.TRAIN.dataset_path = '/usr/sdd/zzl_data/defect_detection/vision_dataset'
+_C.TRAIN.mask_path = ''
 _C.TRAIN.load_checkpoint = False
 _C.TRAIN.load_model_path = "./save_model"
 
@@ -108,6 +129,7 @@ _C.TEST = CfgNode()
 _C.TEST.enable = False
 _C.TEST.method = 'SOFS'
 _C.TEST.dataset_path = '/usr/sdd/zzl_data/defect_detection/vision_dataset'
+_C.TEST.mask_path = ''
 _C.TEST.load_checkpoint = True
 _C.TEST.load_model_path = "./save_model/xxxx.pth"
 

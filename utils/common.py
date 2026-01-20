@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
+import hashlib
 
 LOGGER = logging.getLogger(__name__)
 
@@ -324,25 +325,42 @@ def produce_qualitative_result(
 ):
     # 1,0,0表示的是红色
     color_channel = torch.tensor(np.concatenate((np.array([[0, 0, 0]]), np.array([[1, 0, 0]])), axis=0))
-    # 0.6表示的是透明度
-    rgba = torch.tensor([[0.6]]).repeat(color_channel.shape[0], 1)
+    # 0.3表示的是透明度 (alpha)
+    rgba = torch.tensor([[0.3]]).repeat(color_channel.shape[0], 1)
     rgba = torch.concat((color_channel, rgba), dim=1)
     rgba[0, -1] = 0
 
-    oav = oav.cpu().numpy()  # h, w
+    oav = oav.cpu().numpy()  # h, w (can be float if patch-merged)
     ohm = ohm.cpu().numpy()  # h, w
 
     original_mask = original_mask.cpu().numpy()
-    original_img_path = os.path.join(source_path, query_object, query_filename)
+    # For some datasets (e.g., CUSTOM_MASK_ND), query_filename is already an absolute path.
+    if isinstance(query_filename, str) and os.path.isabs(query_filename) and os.path.exists(query_filename):
+        original_img_path = query_filename
+    elif isinstance(query_filename, str) and os.path.exists(query_filename):
+        original_img_path = query_filename
+    else:
+        original_img_path = os.path.join(source_path, query_object, query_filename)
 
     img = cv2.imread(original_img_path, cv2.IMREAD_COLOR)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+    # Ensure prediction mask is binary {0,1} for visualization.
+    if oav.dtype != np.uint8:
+        oav = (oav > 0.5).astype(np.uint8)
+    if original_mask.dtype != np.uint8:
+        original_mask = (original_mask > 0.5).astype(np.uint8)
+
     true_rgba = generate_rgba(original_mask, rgba)
     oav_rgba = generate_rgba(oav, rgba)
 
-    true_name = "_".join(
-        [support_img_path, query_object, query_filename.split(".")[0].replace("/", "_"), str(test_num)])
+    # NOTE:
+    # - support_img_path can become very long for multi-shot (it may include absolute paths),
+    #   which can exceed filesystem filename limits.
+    # - To keep filenames short AND a fixed length across all shots, use only hashes + a fixed-width counter.
+    query_hash = hashlib.md5(str(query_filename).encode("utf-8", errors="ignore")).hexdigest()[:10]
+    support_hash = hashlib.md5(str(support_img_path).encode("utf-8", errors="ignore")).hexdigest()[:10]
+    true_name = f"q{query_hash}_s{support_hash}_n{int(test_num):04d}"
 
     plt.imshow(img)
     plt.axis("off")
@@ -382,7 +400,7 @@ def produce_qualitative_result_open_domain(
 ):
     # 1,0,0 denote red
     color_channel = torch.tensor(np.concatenate((np.array([[0, 0, 0]]), np.array([[1, 0, 0]])), axis=0))
-    rgba = torch.tensor([[0.6]]).repeat(color_channel.shape[0], 1)
+    rgba = torch.tensor([[0.3]]).repeat(color_channel.shape[0], 1)
     rgba = torch.concat((color_channel, rgba), dim=1)
     rgba[0, -1] = 0
 
@@ -393,10 +411,14 @@ def produce_qualitative_result_open_domain(
     img = cv2.imread(original_img_path, cv2.IMREAD_COLOR)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+    if oav.dtype != np.uint8:
+        oav = (oav > 0.5).astype(np.uint8)
+
     oav_rgba = generate_rgba(oav, rgba)
 
-    true_name = "_".join(
-        [support_img_path, query_object, query_filename.split("/")[-1].split(".")[0], str(test_num)])
+    query_hash = hashlib.md5(str(query_filename).encode("utf-8", errors="ignore")).hexdigest()[:10]
+    support_hash = hashlib.md5(str(support_img_path).encode("utf-8", errors="ignore")).hexdigest()[:10]
+    true_name = f"q{query_hash}_s{support_hash}_n{int(test_num):04d}"
 
     plt.imshow(img)
     plt.axis("off")

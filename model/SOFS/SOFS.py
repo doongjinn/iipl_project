@@ -15,7 +15,14 @@ class SOFS(nn.Module):
     def __init__(self, cfg):
         super(SOFS, self).__init__()
 
-        if cfg.DATASET.name in ["VISION_V1_ND", "DS_Spectrum_DS_ND", "opendomain_test_dataset_ND", 'ECCV_Contest_ND', "ECCV_Contest_Test_ND"]:
+        if cfg.DATASET.name in [
+            "VISION_V1_ND",
+            "DS_Spectrum_DS_ND",
+            "opendomain_test_dataset_ND",
+            "ECCV_Contest_ND",
+            "ECCV_Contest_Test_ND",
+            "CUSTOM_MASK_ND",
+        ]:
             shot = cfg.DATASET.shot * cfg.DATASET.s_in_shot
         else:
             shot = cfg.DATASET.shot

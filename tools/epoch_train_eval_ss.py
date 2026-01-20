@@ -15,6 +15,18 @@ from datasets.dataset_split import VISION_V1_split_train_dict, VISION_V1_split_t
 
 LOGGER = logging.getLogger(__name__)
 
+try:
+    # tqdm is optional; training will still work without it.
+    from tqdm.auto import tqdm as _tqdm  # type: ignore
+except Exception:  # pragma: no cover
+    _tqdm = None
+
+
+def _iter_with_tqdm(iterable, *, desc: str, total: int = None):
+    if _tqdm is None or not is_master_proc():
+        return iterable
+    return _tqdm(iterable, desc=desc, total=total, dynamic_ncols=True, leave=False)
+
 
 def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_class=False):
     if torch.distributed.is_initialized():
@@ -39,8 +51,10 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
     model.train()
     if current_method in ["SOFS"]:
         model.apply(fix_bn)
-    if hasattr(model.module, 'backbone'):
-        model.module.backbone.eval()
+    # DDP wraps the model and exposes `.module`; single-GPU does not.
+    model_ref = model.module if hasattr(model, "module") else model
+    if hasattr(model_ref, "backbone"):
+        model_ref.backbone.eval()
     if epoch == 1:
         if is_master_proc():
             LOGGER.info("backbone eval mode, model train")
@@ -48,12 +62,26 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
     end = time.time()
     val_time = 0.
     max_iter = cfg.TRAIN_SETUPS.epochs * len(train_loader)
-    if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND"]:
-        result_dict = {i: {} for i in VISION_V1_split_train_dict[data_split]}
-    else:
-        raise NotImplementedError
 
-    for i, data in enumerate(train_loader):
+    # Only needed for the optional "validate_each_class" stats collection.
+    result_dict = None
+    if validate_each_class:
+        if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND"]:
+            result_dict = {i: {} for i in VISION_V1_split_train_dict[data_split]}
+        elif cfg.DATASET.name in ["CUSTOM_MASK_ND"]:
+            # CUSTOM_MASK_ND is a single-object dataset defined by DATASET.custom_object_name.
+            result_dict = {cfg.DATASET.custom_object_name: {}}
+        else:
+            raise NotImplementedError(
+                f"validate_each_class is not implemented for DATASET.name={cfg.DATASET.name}"
+            )
+
+    train_iter = _iter_with_tqdm(
+        train_loader,
+        desc=f"train e{epoch}/{cfg.TRAIN_SETUPS.epochs}",
+        total=len(train_loader) if hasattr(train_loader, "__len__") else None,
+    )
+    for i, data in enumerate(train_iter):
         data_time.update(time.time() - end)
         current_iter = (epoch - 1) * len(train_loader) + i + 1
 
@@ -135,11 +163,18 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
     if validate_each_class:
         if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND"]:
             result_dict_total = {i: {} for i in VISION_V1_split_train_dict[data_split]}
+        elif cfg.DATASET.name in ["CUSTOM_MASK_ND"]:
+            result_dict_total = {cfg.DATASET.custom_object_name: {}}
         else:
-            raise NotImplementedError
+            raise NotImplementedError(
+                f"validate_each_class is not implemented for DATASET.name={cfg.DATASET.name}"
+            )
 
-        result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather_object(result_dict_gather, result_dict)
+        if torch.distributed.is_initialized():
+            result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
+            torch.distributed.all_gather_object(result_dict_gather, result_dict)
+        else:
+            result_dict_gather = [result_dict]
 
         if is_master_proc():
             for each_dict in result_dict_gather:
@@ -227,7 +262,12 @@ def epoch_validate_ss(val_loader, model, epoch, cfg, rand_seed, train_validate=F
         raise NotImplementedError
 
     test_num = 0
-    for i, data in enumerate(val_loader):
+    val_iter = _iter_with_tqdm(
+        val_loader,
+        desc=f"validate e{epoch}",
+        total=len(val_loader) if hasattr(val_loader, "__len__") else None,
+    )
+    for i, data in enumerate(val_iter):
 
         s_input = data["support_image"]
         s_mask = data["support_mask"]
@@ -340,10 +380,12 @@ def epoch_validate_ss(val_loader, model, epoch, cfg, rand_seed, train_validate=F
     else:
         raise NotImplementedError
 
-    result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
-    torch.distributed.all_gather_object(result_dict_gather, result_dict)
+    if torch.distributed.is_initialized():
+        result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather_object(result_dict_gather, result_dict)
+    else:
+        result_dict_gather = [result_dict]
 
-    # if is_master_proc():
     for each_dict in result_dict_gather:
         for each_object, category_attribute_val in each_dict.items():
             for category_, attribute_val in category_attribute_val.items():
@@ -431,17 +473,32 @@ def epoch_validate_non_resize_ss(val_loader, model, epoch, cfg, rand_seed, mode=
             split_test_dict = VISION_V1_split_train_val_dict[data_split]
     elif cfg.DATASET.name in ["DS_Spectrum_DS", "DS_Spectrum_DS_ND"]:
         split_test_dict = DS_Spectrum_DS_split_test_dict[data_split]
+    elif cfg.DATASET.name in ["CUSTOM_MASK_ND"]:
+        # Single-object custom dataset.
+        split_test_dict = [cfg.DATASET.custom_object_name]
 
     if cfg.DATASET.name in ["VISION_V1", "VISION_V1_ND", "DS_Spectrum_DS", "DS_Spectrum_DS_ND"]:
         result_dict = {i: {} for i in split_test_dict}
     elif cfg.DATASET.name in ["openset_test_dataset", "openset_test_dataset_ND"]:
         result_dict = {i: {} for i in cfg.DATASET.open_set_test_object}
+    elif cfg.DATASET.name in ["CUSTOM_MASK_ND"]:
+        result_dict = {cfg.DATASET.custom_object_name: {}}
     else:
         raise NotImplementedError
 
     test_num = 0
+    # Extra scalar metrics (binary segmentation): pixel accuracy + Dice(F1) over the full eval set.
+    tp_total = 0
+    fp_total = 0
+    fn_total = 0
+    tn_total = 0
 
-    for i, data in enumerate(val_loader):
+    val_iter = _iter_with_tqdm(
+        val_loader,
+        desc=f"validate({mode}) e{epoch}",
+        total=len(val_loader) if hasattr(val_loader, "__len__") else None,
+    )
+    for i, data in enumerate(val_iter):
         s_input = data["support_image"]
         s_mask = data["support_mask"]
         input = data["query_image"]
@@ -563,9 +620,35 @@ def epoch_validate_non_resize_ss(val_loader, model, epoch, cfg, rand_seed, mode=
                 "new_target": []
             }
 
-        original_mask = target.squeeze(0).squeeze(0)[:int(query_original_shape[0]), :int(query_original_shape[1])]
+        original_mask = target.squeeze(0).squeeze(0)[:int(query_original_shape[0]), :int(query_original_shape[1])].cpu()
 
-        intersection, union, target = intersectionAndUnionGPU(original_output.cuda(), original_mask, 2, 255)
+        # Ensure prediction/GT have identical spatial shapes for metric computation.
+        # For ND patch-merge, `original_output` can be float due to averaging overlaps; quantize to {0,1}.
+        pred = original_output
+        if pred.dtype != torch.long:
+            pred = (pred > 0.5).to(torch.uint8)
+        if original_mask.dtype != torch.uint8:
+            original_mask = (original_mask > 0.5).to(torch.uint8)
+
+        # Ensure both are on CPU for shape alignment and confusion counting.
+        pred = pred.cpu()
+        original_mask = original_mask.cpu()
+
+        if pred.shape != original_mask.shape:
+            # Handle occasional H/W swap, then crop to common area.
+            if pred.ndim == 2 and original_mask.ndim == 2 and pred.shape == tuple(reversed(original_mask.shape)):
+                pred = pred.t()
+            h = min(pred.shape[-2], original_mask.shape[-2])
+            w = min(pred.shape[-1], original_mask.shape[-1])
+            pred = pred[:h, :w]
+            original_mask = original_mask[:h, :w]
+
+        tp_total += int(((pred == 1) & (original_mask == 1)).sum().item())
+        fp_total += int(((pred == 1) & (original_mask == 0)).sum().item())
+        fn_total += int(((pred == 0) & (original_mask == 1)).sum().item())
+        tn_total += int(((pred == 0) & (original_mask == 0)).sum().item())
+
+        intersection, union, target = intersectionAndUnionGPU(pred.cuda(), original_mask.cuda(), 2, 255)
         intersection, union, target = intersection.cpu().numpy(), union.cpu().numpy(), target.cpu().numpy()
         result_dict[query_object][int(query_category)]["intersection"].append(intersection)
         result_dict[query_object][int(query_category)]["union"].append(union)
@@ -594,8 +677,9 @@ def epoch_validate_non_resize_ss(val_loader, model, epoch, cfg, rand_seed, mode=
                         test_num=test_num,
                         support_img_path=support_img_path
                     )
-                except:
-                    pass
+                except Exception as e:
+                    # Don't crash evaluation due to visualization issues, but do log the reason.
+                    LOGGER.warning("Visualization save failed for %s: %s", query_filename, e)
 
     val_time = time.time() - val_start
 
@@ -603,11 +687,16 @@ def epoch_validate_non_resize_ss(val_loader, model, epoch, cfg, rand_seed, mode=
         result_dict_total = {i: {} for i in split_test_dict}
     elif cfg.DATASET.name in ["openset_test_dataset", "openset_test_dataset_ND"]:
         result_dict_total = {i: {} for i in cfg.DATASET.open_set_test_object}
+    elif cfg.DATASET.name in ["CUSTOM_MASK_ND"]:
+        result_dict_total = {cfg.DATASET.custom_object_name: {}}
     else:
         raise NotImplementedError
 
-    result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
-    torch.distributed.all_gather_object(result_dict_gather, result_dict)
+    if torch.distributed.is_initialized():
+        result_dict_gather = [None for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather_object(result_dict_gather, result_dict)
+    else:
+        result_dict_gather = [result_dict]
 
     if is_master_proc():
         total_num = 0
@@ -639,6 +728,18 @@ def epoch_validate_non_resize_ss(val_loader, model, epoch, cfg, rand_seed, mode=
             class_miou=class_miou,
             FB_IOU_intersection=FB_IOU_intersection,
             FB_IOU_union=FB_IOU_union
+        )
+
+        eps = 1e-10
+        pixel_acc = (tp_total + tn_total) / (tp_total + tn_total + fp_total + fn_total + eps)
+        dice = (2.0 * tp_total) / (2.0 * tp_total + fp_total + fn_total + eps)
+        LOGGER.info(
+            "[SHOT_METRICS] shot=%d s_in_shot=%d pixel_acc=%.6f dice=%.6f mIoU=%.6f",
+            int(cfg.DATASET.shot),
+            int(cfg.DATASET.s_in_shot),
+            float(pixel_acc),
+            float(dice),
+            float(class_miou),
         )
 
         # if is_master_proc():

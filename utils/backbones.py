@@ -1,4 +1,17 @@
-import timm  # noqa
+"""
+Backbone registry.
+
+NOTE:
+This repo historically imported `timm` unconditionally, but old timm versions
+may be incompatible with newer torch builds (e.g. expecting `torch._six.container_abcs`).
+For SOFS training with DINOv2 backbones, timm is not required.
+So we make timm optional and only fail if a timm-backed model is actually requested.
+"""
+
+try:
+    import timm  # type: ignore  # noqa
+except Exception:  # pragma: no cover
+    timm = None
 import torchvision.models as models  # noqa
 from dinov2.hub.backbones import *  # noqa
 import antialiased_cnns # noqa
@@ -56,4 +69,10 @@ _BACKBONES = {
 
 
 def load(name):
+    if "timm.create_model" in _BACKBONES.get(name, "") and timm is None:
+        raise ImportError(
+            "Backbone requires `timm`, but timm failed to import in this environment. "
+            "Either install a compatible timm (recommended: `pip install -U timm`) "
+            "or choose a non-timm backbone such as `dinov2_vitb14`."
+        )
     return eval(_BACKBONES[name])
