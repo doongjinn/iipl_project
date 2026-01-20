@@ -63,15 +63,3 @@ bash train.sh
 ```
 sh test.sh
 ```
-
-## To-Do List
-- [x] Task 1: Release inference code and model (open-domain test).
-- [x] Task 2: Release training and test code for different datasets (part).
-- [ ] Task 3: Release inference for a mixture of defective support samples and normal support samples.
-- [ ] Task 4: Release online tools.
-
-## Acknowledgement
-We acknowledge the excellent implementation from [DINO v2](https://github.com/facebookresearch/dinov2), [HDMNet](https://github.com/Pbihao/HDMNet).
-
-## License
-The code is released under the CC BY-NC-SA 4.0 license.
