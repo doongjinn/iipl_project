@@ -19,11 +19,6 @@ Some visualizations are shown in the figure below.
   <img src=assets/vis.jpg width="100%">
 </p>
 
-## **Visualizations under Open Domain**
-- We show the visualizations of SOFS for [Severstal: Steel Defect Detection](https://www.kaggle.com/competitions/severstal-steel-defect-detection/overview) under the open domain, where SOFS is trained on VISION V1.
-<p align="center">
-  <img src=assets/steel.png width="70%">
-</p>
 
 ### Installation
 1. The default python version is python 3.8.
