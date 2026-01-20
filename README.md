@@ -27,14 +27,17 @@ pip install opencv-python==4.5.5.64
 ```
 
 ### Train 
-
+사전학습하기.
 ```
 bash train_dusan_hole.sh
 ```
 
 
 ### Test 
-
+새로운 도메인 데이터로 inference.
 ```
 bash test_dusan_hole.sh
+
+# 사전 학습된 체크포인트 지정해서 test
+CKPT_PATH=/nas_homes/dongjin/iipl_project/last.pth bash test_dusan_hole.sh
 ```
