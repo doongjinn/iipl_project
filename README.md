@@ -1,14 +1,6 @@
 # Small Object Few-shot Segmentation for Vision-based Industrial Inspection
 
 This is an official PyTorch implementation of the paper [Small Object Few-shot Segmentation for Vision-based Industrial Inspection](https://arxiv.org/abs/2407.21351).
-```
-@article{zhang2024small,
-  title={Small Object Few-shot Segmentation for Vision-based Industrial Inspection},
-  author={Zhang, Zilong and Niu, Chang and Zhao, Zhibin and Zhang, Xingwu and Chen, Xuefeng},
-  journal={arXiv preprint arXiv:2407.21351},
-  year={2024}
-}
-```
 
 <p align="center">
   <img src=assets/paradigm.png width="100%">
