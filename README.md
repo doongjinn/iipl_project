@@ -21,6 +21,8 @@ conda create -n sofs python=3.8 -y
 conda activate sofs
 conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch -c nvidia -y
 pip install -r requirements.txt
+pip uninstall -y opencv-python opencv-python-headless
+pip install opencv-python==4.5.5.64
 ```
 
 ### Train and test on VISION V1 dataset or Ds spectrum
