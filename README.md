@@ -3,10 +3,6 @@
 This is an official PyTorch implementation of the paper [Small Object Few-shot Segmentation for Vision-based Industrial Inspection](https://arxiv.org/abs/2407.21351).
 
 <p align="center">
-  <img src=assets/paradigm.png width="100%">
-</p>
-
-<p align="center">
   <img src=assets/SOFS.jpg width="100%">
 </p>
 
@@ -14,10 +10,6 @@ We present SOFS to solve problems that various and sufficient defects are diffic
 SOFS can quickly adapt to unseen classes without retraining, achieving few-shot semantic segmentation (FSS) and few-shot anomaly detection (FAD).
 SOFS can segment the small defects conditioned on the support sets, e.g., it segments the defects with area proportions less than 0.03%.
 Some visualizations are shown in the figure below.
-
-<p align="center">
-  <img src=assets/vis.jpg width="100%">
-</p>
 
 
 ### Installation
