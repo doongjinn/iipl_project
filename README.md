@@ -17,6 +17,9 @@ Some visualizations are shown in the figure below.
 2. Follow the installation of [DINO v2](https://github.com/facebookresearch/dinov2), such as xFormers.
 3. Use the following commands:
 ```
+conda create -n sofs python=3.8 -y
+conda activate sofs
+conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch -c nvidia -y
 pip install -r requirements.txt
 ```
 
