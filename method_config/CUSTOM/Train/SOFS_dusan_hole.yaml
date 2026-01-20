@@ -37,7 +37,8 @@ TRAIN:
 
   backbone: 'dinov2_vitb14'
   backbone_load_state_dict: True
-  backbone_checkpoint: '/nas_homes/dongjin/SOFS/dinov2_vitb14_pretrain.pth'
+  # DINOv2 backbone checkpoint (kept in-repo in this setup)
+  backbone_checkpoint: './dinov2_vitb14_pretrain.pth'
 
   load_checkpoint: False
   load_model_path: "./"

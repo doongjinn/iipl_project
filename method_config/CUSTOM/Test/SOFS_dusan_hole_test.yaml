@@ -33,7 +33,8 @@ TRAIN:
 
   backbone: 'dinov2_vitb14'
   backbone_load_state_dict: True
-  backbone_checkpoint: '/nas_homes/dongjin/SOFS/dinov2_vitb14_pretrain.pth'
+  # DINOv2 backbone checkpoint (kept in-repo in this setup)
+  backbone_checkpoint: './dinov2_vitb14_pretrain.pth'
 
   load_checkpoint: False
   load_model_path: "./"
@@ -84,7 +85,7 @@ TEST:
 
   load_checkpoint: True
   # After training, set this to the saved checkpoint path under OUTPUT_DIR*/checkpoints/*.pth
-  load_model_path: "/nas_homes/dongjin/SOFS/log_CUSTOM_DUSAN_CUSTOM_MASK_ND_SOFS_54/checkpoints/last.pth"
+  load_model_path: "./checkpoints/last.pth"
 
   VISUALIZE:
     # Keep predicted segmentation visualization for the test dataset.
