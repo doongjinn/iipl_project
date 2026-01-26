@@ -9,6 +9,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+.nfs*
 
 # Logs / outputs
 *.log
