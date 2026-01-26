@@ -64,9 +64,20 @@ _C.DATASET.custom_test_count = 0
 # use the training split pairs instead of the held-out split. Useful for reporting
 # metrics on both train and test splits in evaluation mode.
 _C.DATASET.custom_eval_use_train_pairs = False
+# If True, when building an eval dataset (mode != "train") for CUSTOM_MASK_ND,
+# use the union of train+test pairs as the query set (useful when you want to report
+# metrics over the full dataset). Can be combined with custom_support_from_train=True.
+_C.DATASET.custom_eval_use_all_pairs = False
 # If True (CUSTOM_MASK_ND only), during eval (mode != "train") keep query samples from
 # the held-out split, but sample the support images from the training split.
 _C.DATASET.custom_support_from_train = False
+#
+# Optional: split by filename tags (e.g., dataset_final naming via split_samples.py)
+# If enabled, the dataset will route samples into train/test based on whether the
+# image filename contains the train/test tag strings.
+_C.DATASET.custom_split_by_filename_tag = False
+_C.DATASET.custom_split_train_tag = "_train_"
+_C.DATASET.custom_split_test_tag = "_test_"
 
 _C.TRAIN = CfgNode()
 _C.TRAIN.enable = True
@@ -103,6 +114,12 @@ _C.TRAIN.SOFS.conv_vit_down_sampling = True
 _C.TRAIN.SOFS.vit_patch_size = 14
 # eta in the paper
 _C.TRAIN.SOFS.smooth_r = 1e5
+
+# Optional training controls for CUSTOM_MASK_ND (and other datasets that want to split normal vs abnormal streams).
+# When True, the episodic train loader can exclude normal samples (and use them only for a normal-regularizer).
+_C.TRAIN.SOFS.exclude_normal_from_episode = False
+# Weight for the normal-only dice regularizer (see utils.common.dice_binary_loss "f_normal" term).
+_C.TRAIN.SOFS.mndl_weight = 0.0
 
 # todo in the next version
 _C.TRAIN.LOSS = CfgNode()

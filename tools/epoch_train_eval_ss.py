@@ -3,10 +3,11 @@ import logging
 import time
 from utils.common import AverageMeter, intersectionAndUnionGPU, seed_everything, \
     acquire_final_mIOU_FBIOU, produce_qualitative_result, upsample_output_result, acquire_training_miou,\
-    network_output2original_result, fix_bn
+    network_output2original_result, fix_bn, dice_binary_loss
 from tools.optimizer_schedule import poly_learning_rate
 import numpy as np
 import torch
+import torch.nn.functional as F
 import os
 import cv2
 from datasets.base_dataset_fsss import IMAGENET_MEAN, IMAGENET_STD
@@ -28,7 +29,7 @@ def _iter_with_tqdm(iterable, *, desc: str, total: int = None):
     return _tqdm(iterable, desc=desc, total=total, dynamic_ncols=True, leave=False)
 
 
-def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_class=False):
+def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_class=False, normal_loader=None):
     if torch.distributed.is_initialized():
         temp_rank = torch.distributed.get_rank()
     else:
@@ -43,6 +44,7 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
     batch_time = AverageMeter()
     data_time = AverageMeter()
     main_loss_meter = AverageMeter()
+    mndl_loss_meter = AverageMeter()
     loss_meter = AverageMeter()
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
@@ -81,6 +83,8 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
         desc=f"train e{epoch}/{cfg.TRAIN_SETUPS.epochs}",
         total=len(train_loader) if hasattr(train_loader, "__len__") else None,
     )
+    normal_iter = iter(normal_loader) if normal_loader is not None else None
+    mndl_weight = float(getattr(getattr(cfg.TRAIN, "SOFS", {}), "mndl_weight", 0.0) or 0.0)
     for i, data in enumerate(train_iter):
         data_time.update(time.time() - end)
         current_iter = (epoch - 1) * len(train_loader) + i + 1
@@ -119,6 +123,44 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
         else:
             raise NotImplementedError
 
+        # Optional: Mixed Normal Dice Loss (MNDL) stream from normal-only samples.
+        # This is designed to use normal images to suppress false positives, while excluding them from
+        # the episodic defect-localization loss computed above (train_loader should be abnormal-only).
+        if normal_iter is not None and mndl_weight > 0:
+            try:
+                normal_data = next(normal_iter)
+            except StopIteration:
+                normal_iter = iter(normal_loader)
+                normal_data = next(normal_iter)
+
+            ns_input = normal_data["support_image"].cuda(non_blocking=True)
+            ns_mask = normal_data["support_mask"].cuda(non_blocking=True)
+            n_input = normal_data["query_image"].cuda(non_blocking=True)
+
+            # Compute probability map without invoking the training-loss branch of model.forward.
+            # We use the same "mix with normal_out when support has no foreground" logic as inference,
+            # but at the feature-map resolution (no upsample needed for MNDL).
+            model_ref = model.module if hasattr(model, "module") else model
+            logits, mask_weight, each_normal_similarity = model_ref.generate_query_label(n_input, ns_input, ns_mask)
+            if getattr(cfg.TRAIN.SOFS, "meta_cls", True):
+                prob = torch.sigmoid(logits).contiguous()
+            else:
+                prob = torch.softmax(logits, dim=1)[:, 1, ...].contiguous()
+
+            h, w = prob.shape[-2:]
+            normal_out = each_normal_similarity
+            if normal_out.dim() == 4:
+                normal_out = normal_out.squeeze(1)
+            if normal_out.shape[-2:] != (h, w):
+                normal_out = F.interpolate(normal_out.unsqueeze(1), size=(h, w), mode="bilinear", align_corners=False).squeeze(1)
+
+            mw = mask_weight.view(-1, 1, 1).float()
+            prob_mix = mw * prob + (1 - mw) * normal_out
+
+            # Target is all-zero for normal images; dice_binary_loss will use its "normal" branch.
+            mndl_loss = dice_binary_loss(prob_mix, torch.zeros_like(prob_mix), smooth_r=cfg.TRAIN.SOFS.smooth_r)
+            loss = loss + mndl_weight * mndl_loss
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -137,6 +179,8 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
         intersection_meter.update(intersection), union_meter.update(union), target_meter.update(target)
 
         main_loss_meter.update(main_loss.item(), n)
+        if normal_iter is not None and mndl_weight > 0:
+            mndl_loss_meter.update(mndl_loss.item(), n)
         loss_meter.update(loss.item(), n)
 
         batch_time.update(time.time() - end - val_time)
@@ -151,10 +195,11 @@ def epoch_train_ss(train_loader, model, optimizer, epoch, cfg, validate_each_cla
     if is_master_proc():
         if current_method in ["SOFS"]:
             LOGGER.info(
-                'Train result at epoch [{}/{}]: data_time: {:.2f}, batch_time: {:.2f} loss: {:.4f}, main_loss: {:.4f}, FB_IOU/mRecall {:.4f}/{:.4f}.'.format(
+                'Train result at epoch [{}/{}]: data_time: {:.2f}, batch_time: {:.2f} loss: {:.4f}, main_loss: {:.4f}, mndl_loss: {:.4f}, FB_IOU/mRecall {:.4f}/{:.4f}.'.format(
                     epoch, cfg.TRAIN_SETUPS.epochs,
                     data_time.avg, batch_time.avg,
                     loss_meter.avg, main_loss_meter.avg,
+                    mndl_loss_meter.avg,
                     FB_IOU, mRecall))
 
         for i in range(2):

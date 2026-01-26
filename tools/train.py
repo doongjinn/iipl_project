@@ -24,6 +24,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 
 LOGGER = logging.getLogger(__name__)
 
+from datasets.custom_mask_fsss_ND import CUSTOM_MASK_FSSS_ND  # noqa: E402
+
 
 def train(cfg):
     """
@@ -73,6 +75,44 @@ def train(cfg):
 
             # start training
             torch.cuda.empty_cache()
+
+            normal_train_loader = None
+            # Special handling for CUSTOM_MASK_ND:
+            # - Use abnormal-only episodes for the main defect-localization loss.
+            # - Use normal-only samples for Mixed Normal Dice Loss (MNDL) as an auxiliary regularizer.
+            if cfg.DATASET.name == "CUSTOM_MASK_ND" and bool(getattr(cfg.TRAIN.SOFS, "exclude_normal_from_episode", False)):
+                LOGGER.info("[CUSTOM_MASK_ND] exclude_normal_from_episode=True: building abnormal-only train loader")
+                individual_datasets = CUSTOM_MASK_FSSS_ND(cfg=cfg, mode="train", status_filter=["abnormal"])
+                individual_datasets.name = cfg.DATASET.name + "_abnormal_only"
+                try:
+                    normal_dataset = CUSTOM_MASK_FSSS_ND(cfg=cfg, mode="train", status_filter=["normal"])
+                    normal_dataset.name = cfg.DATASET.name + "_normal_only"
+                    if cfg.NUM_GPUS > 1:
+                        normal_sampler = torch.utils.data.distributed.DistributedSampler(normal_dataset)
+                        normal_train_loader = torch.utils.data.DataLoader(
+                            normal_dataset,
+                            batch_size=cfg.TRAIN_SETUPS.batch_size,
+                            shuffle=(normal_sampler is None),
+                            num_workers=cfg.TRAIN_SETUPS.num_workers,
+                            pin_memory=True,
+                            sampler=normal_sampler,
+                            drop_last=True,
+                        )
+                    else:
+                        normal_train_loader = torch.utils.data.DataLoader(
+                            normal_dataset,
+                            batch_size=cfg.TRAIN_SETUPS.batch_size,
+                            shuffle=True,
+                            num_workers=cfg.TRAIN_SETUPS.num_workers,
+                            pin_memory=True,
+                            drop_last=True,
+                        )
+                    LOGGER.info(
+                        f"[CUSTOM_MASK_ND] normal-only loader enabled for MNDL, n={len(normal_dataset)} "
+                        f"mndl_weight={float(getattr(cfg.TRAIN.SOFS, 'mndl_weight', 0.0) or 0.0)}"
+                    )
+                except Exception as e:
+                    LOGGER.warning(f"[CUSTOM_MASK_ND] normal-only loader disabled (could not build): {e}")
 
             if cfg.NUM_GPUS > 1:
                 train_sampler = torch.utils.data.distributed.DistributedSampler(individual_datasets)
@@ -202,7 +242,8 @@ def train(cfg):
                             optimizer=optimizer,
                             epoch=epoch,
                             cfg=cfg,
-                            validate_each_class=validate_each_class
+                            validate_each_class=validate_each_class,
+                            normal_loader=normal_train_loader
                         )
                     else:
                         raise NotImplementedError

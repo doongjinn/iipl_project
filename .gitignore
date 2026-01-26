@@ -16,6 +16,10 @@ log_*/
 log_CUSTOM_*/
 figure_save/
 
+# Eval outputs (keep local by default)
+dataset_final_metrics_*.csv
+dataset_final_metrics_figures/
+
 # Data artifacts
 *.pth
 *.pt
