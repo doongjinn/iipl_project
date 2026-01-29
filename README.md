@@ -39,5 +39,5 @@ bash train_dusan_hole.sh
 bash test_dusan_hole.sh
 
 # 사전 학습된 체크포인트 지정해서 test
-CKPT_PATH=/nas_homes/dongjin/iipl_project/last.pth bash test_dusan_hole.sh
+CKPT_PATH=/nas_homes/dongjin/iipl_project/last.pth bash test_dataset_final.sh
 ```
